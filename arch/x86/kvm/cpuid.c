@@ -9,6 +9,20 @@
  * Copyright IBM Corporation, 2008
  */
 
+
+atomic_t exit_counter = ATOMIC_INIT(0);
+EXPORT_SYMBOL(exit_counter);
+
+atomic_long_t nbr_cycles = ATOMIC_INIT(0);
+EXPORT_SYMBOL(nbr_cycles);
+
+atomic_t et_counter[67] = ATOMIC_INIT(0);
+EXPORT_SYMBOL(et_counter);
+
+atomic_long_t exit_cycles[67] = ATOMIC_INIT(0);
+EXPORT_SYMBOL(exit_cycles);
+
+
 #include <linux/kvm_host.h>
 #include <linux/export.h>
 #include <linux/vmalloc.h>
@@ -1043,10 +1057,98 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 
 	if (cpuid_fault_enabled(vcpu) && !kvm_require_cpl(vcpu, 0))
 		return 1;
-
+	
+	
 	eax = kvm_rax_read(vcpu);
 	ecx = kvm_rcx_read(vcpu);
-	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+	int i;
+
+	if (eax == 0x4FFFFFFF)
+	{	
+		eax = atomic_read(&exit_counter);
+		ebx = 0;
+		ecx = 0;
+		edx = 0;
+		
+	}
+	else if(eax == 0x4FFFFFFE)
+	{
+		u64 tcycles = 0;
+		tcycles = atomic_long_read(&nbr_cycles);
+		ebx = tcycles >>32 & 0xFFFFFFFF;
+		ecx = tcycles & 0xFFFFFFFF;
+		eax = 0;
+		edx = 0;
+	}
+	else if(eax == 0x4FFFFFFD)
+	{
+		for (i=0; i<=66; i++)	
+		{	
+			if(ecx == i)
+			{
+				if(ecx == 35 || ecx == 38 || ecx == 42 || ecx == 65 || ecx == 66)
+				{
+					eax = 0;
+					ebx = 0;
+					ecx = 0;
+					edx = 0xFFFFFFFF;
+				}
+				else if(ecx == 3 || ecx == 4 || ecx == 5 || ecx == 6 || ecx == 11|| ecx == 16 || ecx == 17 || ecx == 33 || ecx == 34)
+				{
+					eax = 0;
+					ebx = 0;
+					ecx = 0;
+					edx = 0;
+				}
+				else	
+				{	
+					eax = atomic_read(&et_counter[i]);
+					ebx = 0;
+					ecx = 0;
+					edx = 0;
+					printk(KERN_INFO "exit counter:%u\n",eax);
+				}					
+			}
+		}
+	}
+	else if(eax == 0x4FFFFFFC)
+	{
+		for (i=0; i<=66; i++)	
+		{	
+			if(ecx == i)
+			{
+				if(ecx == 35 || ecx == 38 || ecx == 42 || ecx == 65 || ecx == 66)
+				{
+					eax = 0;
+					ebx = 0;
+					ecx = 0;
+					edx = 0xFFFFFFFF;
+				}
+				else if(ecx == 3 || ecx == 4 || ecx == 5 || ecx == 6 || ecx == 11|| ecx == 16 || ecx == 17 || ecx == 33 || ecx == 34)
+				{
+					eax = 0;
+					ebx = 0;
+					ecx = 0;
+					edx = 0;
+				}
+				else	
+				{	
+					u64 tcycles = 0;
+					tcycles = atomic_long_read(&exit_cycles[i]);
+					ebx = tcycles >>32 & 0xFFFFFFFF;
+					ecx = tcycles & 0xFFFFFFFF;
+					eax = 0;
+					edx = 0;
+				}					
+			}
+		}
+	}
+	
+	else
+	{
+		kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+	}
+	
 	kvm_rax_write(vcpu, eax);
 	kvm_rbx_write(vcpu, ebx);
 	kvm_rcx_write(vcpu, ecx);
